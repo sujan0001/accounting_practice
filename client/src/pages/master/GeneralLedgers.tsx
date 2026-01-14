@@ -8,6 +8,7 @@ export default function GeneralLedgers() {
   const [generalLedgers, setGeneralLedgers] = useState<GeneralLedger[]>([]);
   const [ledgerGroups, setLedgerGroups] = useState<LedgerGroup[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingLedger, setEditingLedger] = useState<GeneralLedger | null>(null);
   const [formData, setFormData] = useState({
     ledgerName: '',
     alias: '',
@@ -45,7 +46,12 @@ export default function GeneralLedgers() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post(`/projects/${activeProject?._id}/general-ledgers`, formData);
+      if (editingLedger) {
+        await api.put(`/projects/${activeProject?._id}/general-ledgers/${editingLedger._id}`, formData);
+        setEditingLedger(null);
+      } else {
+        await api.post(`/projects/${activeProject?._id}/general-ledgers`, formData);
+      }
       setShowForm(false);
       setFormData({
         ledgerName: '',
@@ -57,8 +63,46 @@ export default function GeneralLedgers() {
       });
       fetchGeneralLedgers();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to create general ledger');
+      alert(error.response?.data?.message || `Failed to ${editingLedger ? 'update' : 'create'} general ledger`);
     }
+  };
+
+  const handleEdit = (ledger: GeneralLedger) => {
+    setEditingLedger(ledger);
+    setFormData({
+      ledgerName: ledger.ledgerName,
+      alias: ledger.alias,
+      ledgerGroup: typeof ledger.ledgerGroup === 'object' ? ledger.ledgerGroup._id : ledger.ledgerGroup,
+      openingBalance: ledger.openingBalance,
+      openingBalanceType: ledger.openingBalanceType,
+      description: ledger.description || '',
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (ledgerId: string) => {
+    if (!confirm('Are you sure you want to delete this general ledger? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await api.delete(`/projects/${activeProject?._id}/general-ledgers/${ledgerId}`);
+      fetchGeneralLedgers();
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to delete general ledger');
+    }
+  };
+
+  const handleCancel = () => {
+    setShowForm(false);
+    setEditingLedger(null);
+    setFormData({
+      ledgerName: '',
+      alias: '',
+      ledgerGroup: '',
+      openingBalance: 0,
+      openingBalanceType: 'debit',
+      description: '',
+    });
   };
 
   if (!activeProject) {
@@ -70,7 +114,13 @@ export default function GeneralLedgers() {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">General Ledgers</h2>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            if (showForm) {
+              handleCancel();
+            } else {
+              setShowForm(true);
+            }
+          }}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
         >
           {showForm ? 'Cancel' : 'Create New'}
@@ -161,12 +211,21 @@ export default function GeneralLedgers() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />
           </div>
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-          >
-            Create
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+            >
+              {editingLedger ? 'Update' : 'Create'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg"
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       )}
 
@@ -177,6 +236,7 @@ export default function GeneralLedgers() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ledger Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alias</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ledger Group</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -190,6 +250,22 @@ export default function GeneralLedgers() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {typeof ledger.ledgerGroup === 'object' ? ledger.ledgerGroup.groupName : ''}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEdit(ledger)}
+                      className="text-green-600 hover:text-green-800"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(ledger._id)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

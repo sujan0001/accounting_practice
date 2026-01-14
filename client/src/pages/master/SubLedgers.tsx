@@ -8,6 +8,7 @@ export default function SubLedgers() {
   const [subLedgers, setSubLedgers] = useState<SubLedger[]>([]);
   const [generalLedgers, setGeneralLedgers] = useState<GeneralLedger[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingSubLedger, setEditingSubLedger] = useState<SubLedger | null>(null);
   const [formData, setFormData] = useState({
     subLedgerName: '',
     alias: '',
@@ -45,7 +46,12 @@ export default function SubLedgers() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post(`/projects/${activeProject?._id}/sub-ledgers`, formData);
+      if (editingSubLedger) {
+        await api.put(`/projects/${activeProject?._id}/sub-ledgers/${editingSubLedger._id}`, formData);
+        setEditingSubLedger(null);
+      } else {
+        await api.post(`/projects/${activeProject?._id}/sub-ledgers`, formData);
+      }
       setShowForm(false);
       setFormData({
         subLedgerName: '',
@@ -57,8 +63,46 @@ export default function SubLedgers() {
       });
       fetchSubLedgers();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to create sub ledger');
+      alert(error.response?.data?.message || `Failed to ${editingSubLedger ? 'update' : 'create'} sub ledger`);
     }
+  };
+
+  const handleEdit = (subLedger: SubLedger) => {
+    setEditingSubLedger(subLedger);
+    setFormData({
+      subLedgerName: subLedger.subLedgerName,
+      alias: subLedger.alias,
+      generalLedger: typeof subLedger.generalLedger === 'object' ? subLedger.generalLedger._id : subLedger.generalLedger,
+      openingBalance: subLedger.openingBalance,
+      openingBalanceType: subLedger.openingBalanceType,
+      description: subLedger.description || '',
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (subLedgerId: string) => {
+    if (!confirm('Are you sure you want to delete this sub ledger? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await api.delete(`/projects/${activeProject?._id}/sub-ledgers/${subLedgerId}`);
+      fetchSubLedgers();
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to delete sub ledger');
+    }
+  };
+
+  const handleCancel = () => {
+    setShowForm(false);
+    setEditingSubLedger(null);
+    setFormData({
+      subLedgerName: '',
+      alias: '',
+      generalLedger: '',
+      openingBalance: 0,
+      openingBalanceType: 'debit',
+      description: '',
+    });
   };
 
   if (!activeProject) {
@@ -70,7 +114,13 @@ export default function SubLedgers() {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">Sub Ledgers</h2>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            if (showForm) {
+              handleCancel();
+            } else {
+              setShowForm(true);
+            }
+          }}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
         >
           {showForm ? 'Cancel' : 'Create New'}
@@ -161,12 +211,21 @@ export default function SubLedgers() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />
           </div>
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-          >
-            Create
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+            >
+              {editingSubLedger ? 'Update' : 'Create'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg"
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       )}
 
@@ -177,6 +236,7 @@ export default function SubLedgers() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sub Ledger Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alias</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">General Ledger</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -190,6 +250,22 @@ export default function SubLedgers() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {typeof subLedger.generalLedger === 'object' ? subLedger.generalLedger.ledgerName : ''}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEdit(subLedger)}
+                      className="text-green-600 hover:text-green-800"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(subLedger._id)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

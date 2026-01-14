@@ -1,10 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import LedgerGroups from './LedgerGroups';
 import GeneralLedgers from './GeneralLedgers';
 import SubLedgers from './SubLedgers';
 
 export default function MasterSetup() {
-  const [activeTab, setActiveTab] = useState<'groups' | 'ledgers' | 'subledgers'>('groups');
+  const { type } = useParams();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'groups' | 'ledgers' | 'subledgers'>(
+    (type as 'groups' | 'ledgers' | 'subledgers') || 'groups'
+  );
+
+  useEffect(() => {
+    if (type && ['ledger-groups', 'general-ledgers', 'sub-ledgers'].includes(type)) {
+      const tabMap: Record<string, 'groups' | 'ledgers' | 'subledgers'> = {
+        'ledger-groups': 'groups',
+        'general-ledgers': 'ledgers',
+        'sub-ledgers': 'subledgers',
+      };
+      setActiveTab(tabMap[type] || 'groups');
+    }
+  }, [type]);
+
+  const handleTabChange = (tab: 'groups' | 'ledgers' | 'subledgers') => {
+    setActiveTab(tab);
+    const routeMap: Record<string, string> = {
+      groups: 'ledger-groups',
+      ledgers: 'general-ledgers',
+      subledgers: 'sub-ledgers',
+    };
+    navigate(`/master-setup/${routeMap[tab]}`);
+  };
 
   return (
     <div>
@@ -14,7 +40,7 @@ export default function MasterSetup() {
         <div className="border-b border-gray-200">
           <nav className="flex">
             <button
-              onClick={() => setActiveTab('groups')}
+              onClick={() => handleTabChange('groups')}
               className={`px-6 py-3 font-medium text-sm ${
                 activeTab === 'groups'
                   ? 'border-b-2 border-blue-500 text-blue-600'
@@ -24,7 +50,7 @@ export default function MasterSetup() {
               Ledger Groups
             </button>
             <button
-              onClick={() => setActiveTab('ledgers')}
+              onClick={() => handleTabChange('ledgers')}
               className={`px-6 py-3 font-medium text-sm ${
                 activeTab === 'ledgers'
                   ? 'border-b-2 border-blue-500 text-blue-600'
@@ -34,7 +60,7 @@ export default function MasterSetup() {
               General Ledgers
             </button>
             <button
-              onClick={() => setActiveTab('subledgers')}
+              onClick={() => handleTabChange('subledgers')}
               className={`px-6 py-3 font-medium text-sm ${
                 activeTab === 'subledgers'
                   ? 'border-b-2 border-blue-500 text-blue-600'

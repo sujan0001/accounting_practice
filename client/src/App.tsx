@@ -73,8 +73,24 @@ function AppRoutes() {
                   element={activeProject ? <Reports /> : <Navigate to="/projects/switch" />}
                 />
                 <Route
+                  path="/reports/:type"
+                  element={activeProject ? <Reports /> : <Navigate to="/projects/switch" />}
+                />
+                <Route
                   path="/books"
                   element={activeProject ? <Books /> : <Navigate to="/projects/switch" />}
+                />
+                <Route
+                  path="/books/:type"
+                  element={activeProject ? <Books /> : <Navigate to="/projects/switch" />}
+                />
+                <Route
+                  path="/master-setup"
+                  element={activeProject ? <MasterSetup /> : <Navigate to="/projects/switch" />}
+                />
+                <Route
+                  path="/master-setup/:type"
+                  element={activeProject ? <MasterSetup /> : <Navigate to="/projects/switch" />}
                 />
                 <Route path="/" element={<Navigate to="/dashboard" />} />
               </Routes>

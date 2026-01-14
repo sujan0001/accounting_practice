@@ -7,16 +7,18 @@ export default function JournalVoucherEntry() {
   const { activeProject } = useProject();
   const [vouchers, setVouchers] = useState<JournalVoucher[]>([]);
   const [generalLedgers, setGeneralLedgers] = useState<GeneralLedger[]>([]);
+  const [subLedgers, setSubLedgers] = useState<SubLedger[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
+    voucherNo: '',
     date: '',
     narration: '',
     entries: [] as Array<{
       serialNo: number;
       generalLedger: string;
       subLedger?: string;
-      debitAmount: number;
-      creditAmount: number;
+      drCr: 'dr' | 'cr' | '';
+      amount: number;
       narration?: string;
     }>,
     totalDebit: 0,
@@ -27,8 +29,18 @@ export default function JournalVoucherEntry() {
     if (activeProject) {
       fetchVouchers();
       fetchGeneralLedgers();
+      fetchSubLedgers();
     }
   }, [activeProject]);
+
+  const fetchSubLedgers = async () => {
+    try {
+      const response = await api.get(`/projects/${activeProject?._id}/sub-ledgers`);
+      setSubLedgers(response.data.subLedgers);
+    } catch (error) {
+      console.error('Failed to fetch sub ledgers:', error);
+    }
+  };
 
   const fetchVouchers = async () => {
     try {
@@ -56,8 +68,8 @@ export default function JournalVoucherEntry() {
         {
           serialNo: formData.entries.length + 1,
           generalLedger: '',
-          debitAmount: 0,
-          creditAmount: 0,
+          drCr: '',
+          amount: 0,
         },
       ],
     });
@@ -66,17 +78,21 @@ export default function JournalVoucherEntry() {
   const updateEntry = (index: number, field: string, value: any) => {
     const updated = [...formData.entries];
     updated[index] = { ...updated[index], [field]: value };
-    
-    // If debit is set, clear credit and vice versa
-    if (field === 'debitAmount' && value > 0) {
-      updated[index].creditAmount = 0;
-    }
-    if (field === 'creditAmount' && value > 0) {
-      updated[index].debitAmount = 0;
+
+    // If general ledger changes, clear sub ledger
+    if (field === 'generalLedger') {
+      updated[index].subLedger = '';
     }
 
-    const totalDebit = updated.reduce((sum, e) => sum + (e.debitAmount || 0), 0);
-    const totalCredit = updated.reduce((sum, e) => sum + (e.creditAmount || 0), 0);
+    // Calculate totals based on drCr and amount
+    const totalDebit = updated.reduce((sum, e) => {
+      if (e.drCr === 'dr') return sum + (e.amount || 0);
+      return sum;
+    }, 0);
+    const totalCredit = updated.reduce((sum, e) => {
+      if (e.drCr === 'cr') return sum + (e.amount || 0);
+      return sum;
+    }, 0);
 
     setFormData({
       ...formData,
@@ -86,13 +102,28 @@ export default function JournalVoucherEntry() {
     });
   };
 
+  const getSubLedgersForGL = (generalLedgerId: string): SubLedger[] => {
+    return subLedgers.filter((sl) => {
+      if (typeof sl.generalLedger === 'object') {
+        return sl.generalLedger._id === generalLedgerId;
+      }
+      return sl.generalLedger === generalLedgerId;
+    });
+  };
+
   const removeEntry = (index: number) => {
     const updated = formData.entries.filter((_, i) => i !== index);
     updated.forEach((item, i) => {
       item.serialNo = i + 1;
     });
-    const totalDebit = updated.reduce((sum, e) => sum + (e.debitAmount || 0), 0);
-    const totalCredit = updated.reduce((sum, e) => sum + (e.creditAmount || 0), 0);
+    const totalDebit = updated.reduce((sum, e) => {
+      if (e.drCr === 'dr') return sum + (e.amount || 0);
+      return sum;
+    }, 0);
+    const totalCredit = updated.reduce((sum, e) => {
+      if (e.drCr === 'cr') return sum + (e.amount || 0);
+      return sum;
+    }, 0);
     setFormData({
       ...formData,
       entries: updated,
@@ -115,10 +146,25 @@ export default function JournalVoucherEntry() {
       return;
     }
 
+    // Convert entries to backend format
+    const entriesForBackend = formData.entries.map((entry) => ({
+      serialNo: entry.serialNo,
+      generalLedger: entry.generalLedger,
+      subLedger: entry.subLedger || undefined,
+      debitAmount: entry.drCr === 'dr' ? entry.amount : 0,
+      creditAmount: entry.drCr === 'cr' ? entry.amount : 0,
+      narration: entry.narration || undefined,
+    }));
+
     try {
-      await api.post(`/projects/${activeProject?._id}/journal-vouchers`, formData);
+      await api.post(`/projects/${activeProject?._id}/journal-vouchers`, {
+        date: formData.date,
+        narration: formData.narration,
+        entries: entriesForBackend,
+      });
       setShowForm(false);
       setFormData({
+        voucherNo: '',
         date: '',
         narration: '',
         entries: [],
@@ -156,6 +202,18 @@ export default function JournalVoucherEntry() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Voucher Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.voucherNo}
+                  placeholder="Auto-generated if left empty"
+                  onChange={(e) => setFormData({ ...formData, voucherNo: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Date *
                 </label>
                 <input
@@ -166,17 +224,17 @@ export default function JournalVoucherEntry() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Narration
-                </label>
-                <input
-                  type="text"
-                  value={formData.narration}
-                  onChange={(e) => setFormData({ ...formData, narration: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Narration
+              </label>
+              <input
+                type="text"
+                value={formData.narration}
+                onChange={(e) => setFormData({ ...formData, narration: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              />
             </div>
 
             <div>
@@ -195,10 +253,10 @@ export default function JournalVoucherEntry() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">S.No</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">General Ledger *</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Particulars (General Ledger) *</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Sub Ledger</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Debit</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Credit</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Dr / Cr</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Amount</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Narration</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                     </tr>
@@ -223,28 +281,40 @@ export default function JournalVoucherEntry() {
                           </select>
                         </td>
                         <td className="px-3 py-2">
-                          <input
-                            type="text"
+                          <select
                             value={entry.subLedger || ''}
                             onChange={(e) => updateEntry(index, 'subLedger', e.target.value)}
                             className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                          />
+                            disabled={!entry.generalLedger}
+                          >
+                            <option value="">Select Sub Ledger</option>
+                            {entry.generalLedger &&
+                              getSubLedgersForGL(entry.generalLedger).map((sl) => (
+                                <option key={sl._id} value={sl._id}>
+                                  {sl.subLedgerName}
+                                </option>
+                              ))}
+                          </select>
                         </td>
                         <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={entry.debitAmount || 0}
-                            onChange={(e) => updateEntry(index, 'debitAmount', parseFloat(e.target.value) || 0)}
+                          <select
+                            required
+                            value={entry.drCr}
+                            onChange={(e) => updateEntry(index, 'drCr', e.target.value)}
                             className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                          />
+                          >
+                            <option value="">Select</option>
+                            <option value="dr">Dr</option>
+                            <option value="cr">Cr</option>
+                          </select>
                         </td>
                         <td className="px-3 py-2">
                           <input
                             type="number"
                             step="0.01"
-                            value={entry.creditAmount || 0}
-                            onChange={(e) => updateEntry(index, 'creditAmount', parseFloat(e.target.value) || 0)}
+                            required
+                            value={entry.amount || 0}
+                            onChange={(e) => updateEntry(index, 'amount', parseFloat(e.target.value) || 0)}
                             className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                           />
                         </td>

@@ -13,9 +13,9 @@ export default function Layout({ children }: LayoutProps) {
       <TopNav />
       <div className="flex">
         <Sidebar />
-        <div className="flex-1 ml-64">
+         <div className="flex-1 ml-64 mt-16">
           <ProjectNav />
-          <main className="p-6">
+          <main className="p-6 min-h-screen">
             {children}
           </main>
         </div>

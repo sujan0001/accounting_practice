@@ -8,6 +8,7 @@ export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [formData, setFormData] = useState({
     projectName: '',
     alias: '',
@@ -37,7 +38,12 @@ export default function Projects() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post('/projects', formData);
+      if (editingProject) {
+        await api.put(`/projects/${editingProject._id}`, formData);
+        setEditingProject(null);
+      } else {
+        await api.post('/projects', formData);
+      }
       setShowCreateForm(false);
       setFormData({
         projectName: '',
@@ -49,8 +55,46 @@ export default function Projects() {
       });
       fetchProjects();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to create project');
+      alert(error.response?.data?.message || `Failed to ${editingProject ? 'update' : 'create'} project`);
     }
+  };
+
+  const handleEdit = (project: Project) => {
+    setEditingProject(project);
+    setFormData({
+      projectName: project.projectName,
+      alias: project.alias,
+      panNo: project.panNo || '',
+      financialYearFrom: project.financialYearFrom,
+      financialYearTo: project.financialYearTo || '',
+      description: project.description || '',
+    });
+    setShowCreateForm(true);
+  };
+
+  const handleDelete = async (projectId: string) => {
+    if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await api.delete(`/projects/${projectId}`);
+      fetchProjects();
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to delete project');
+    }
+  };
+
+  const handleCancel = () => {
+    setShowCreateForm(false);
+    setEditingProject(null);
+    setFormData({
+      projectName: '',
+      alias: '',
+      panNo: '',
+      financialYearFrom: '',
+      financialYearTo: '',
+      description: '',
+    });
   };
 
   const handleLoadProject = async (projectId: string) => {
@@ -71,7 +115,13 @@ export default function Projects() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
         <button
-          onClick={() => setShowCreateForm(!showCreateForm)}
+          onClick={() => {
+            if (showCreateForm) {
+              handleCancel();
+            } else {
+              setShowCreateForm(true);
+            }
+          }}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
         >
           {showCreateForm ? 'Cancel' : 'Create Project'}
@@ -80,7 +130,9 @@ export default function Projects() {
 
       {showCreateForm && (
         <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Create New Project</h2>
+          <h2 className="text-xl font-semibold mb-4">
+            {editingProject ? 'Edit Project' : 'Create New Project'}
+          </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -155,12 +207,21 @@ export default function Projects() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
-            <button
-              type="submit"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-            >
-              Create Project
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+              >
+                {editingProject ? 'Update Project' : 'Create Project'}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -192,12 +253,26 @@ export default function Projects() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <button
-                    onClick={() => handleLoadProject(project._id)}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    Load
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleLoadProject(project._id)}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      Load
+                    </button>
+                    <button
+                      onClick={() => handleEdit(project)}
+                      className="text-green-600 hover:text-green-800"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(project._id)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

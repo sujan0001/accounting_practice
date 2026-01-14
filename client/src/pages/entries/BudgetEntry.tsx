@@ -7,8 +7,10 @@ export default function BudgetEntry() {
   const { activeProject } = useProject();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [generalLedgers, setGeneralLedgers] = useState<GeneralLedger[]>([]);
+  const [subLedgers, setSubLedgers] = useState<SubLedger[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
+    budgetNo: '',
     approvedDate: '',
     approvedBy: '',
     lineItems: [] as Array<{
@@ -27,8 +29,18 @@ export default function BudgetEntry() {
     if (activeProject) {
       fetchBudgets();
       fetchGeneralLedgers();
+      fetchSubLedgers();
     }
   }, [activeProject]);
+
+  const fetchSubLedgers = async () => {
+    try {
+      const response = await api.get(`/projects/${activeProject?._id}/sub-ledgers`);
+      setSubLedgers(response.data.subLedgers);
+    } catch (error) {
+      console.error('Failed to fetch sub ledgers:', error);
+    }
+  };
 
   const fetchBudgets = async () => {
     try {
@@ -65,10 +77,25 @@ export default function BudgetEntry() {
   const updateLineItem = (index: number, field: string, value: any) => {
     const updated = [...formData.lineItems];
     updated[index] = { ...updated[index], [field]: value };
+    
+    // If general ledger changes, clear sub ledger
+    if (field === 'generalLedger') {
+      updated[index].subLedger = '';
+    }
+    
     setFormData({
       ...formData,
       lineItems: updated,
       totalAmount: updated.reduce((sum, item) => sum + (item.amount || 0), 0),
+    });
+  };
+
+  const getSubLedgersForGL = (generalLedgerId: string): SubLedger[] => {
+    return subLedgers.filter((sl) => {
+      if (typeof sl.generalLedger === 'object') {
+        return sl.generalLedger._id === generalLedgerId;
+      }
+      return sl.generalLedger === generalLedgerId;
     });
   };
 
@@ -90,6 +117,7 @@ export default function BudgetEntry() {
       await api.post(`/projects/${activeProject?._id}/budgets`, formData);
       setShowForm(false);
       setFormData({
+        budgetNo: '',
         approvedDate: '',
         approvedBy: '',
         lineItems: [],
@@ -124,7 +152,19 @@ export default function BudgetEntry() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Approved Date *
+                  Budget Voucher Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.budgetNo}
+                  placeholder="Auto-generated if left empty"
+                  onChange={(e) => setFormData({ ...formData, budgetNo: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date *
                 </label>
                 <input
                   type="date"
@@ -134,17 +174,17 @@ export default function BudgetEntry() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Approved By
-                </label>
-                <input
-                  type="text"
-                  value={formData.approvedBy}
-                  onChange={(e) => setFormData({ ...formData, approvedBy: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Approved By
+              </label>
+              <input
+                type="text"
+                value={formData.approvedBy}
+                onChange={(e) => setFormData({ ...formData, approvedBy: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              />
             </div>
 
             <div>
@@ -163,8 +203,8 @@ export default function BudgetEntry() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">S.No</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">General Ledger *</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Sub Ledger</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Account Head (General Ledger) *</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Sub Head (Sub Ledger)</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">District</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Period</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Amount *</th>
@@ -191,12 +231,20 @@ export default function BudgetEntry() {
                           </select>
                         </td>
                         <td className="px-3 py-2">
-                          <input
-                            type="text"
+                          <select
                             value={item.subLedger || ''}
                             onChange={(e) => updateLineItem(index, 'subLedger', e.target.value)}
                             className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                          />
+                            disabled={!item.generalLedger}
+                          >
+                            <option value="">Select Sub Ledger</option>
+                            {item.generalLedger &&
+                              getSubLedgersForGL(item.generalLedger).map((sl) => (
+                                <option key={sl._id} value={sl._id}>
+                                  {sl.subLedgerName}
+                                </option>
+                              ))}
+                          </select>
                         </td>
                         <td className="px-3 py-2">
                           <input

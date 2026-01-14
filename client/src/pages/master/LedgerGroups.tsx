@@ -8,6 +8,7 @@ export default function LedgerGroups() {
   const [ledgerGroups, setLedgerGroups] = useState<LedgerGroup[]>([]);
   const [accountTypes, setAccountTypes] = useState<AccountType[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<LedgerGroup | null>(null);
   const [formData, setFormData] = useState({
     groupName: '',
     alias: '',
@@ -43,13 +44,47 @@ export default function LedgerGroups() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post(`/projects/${activeProject?._id}/ledger-groups`, formData);
+      if (editingGroup) {
+        await api.put(`/projects/${activeProject?._id}/ledger-groups/${editingGroup._id}`, formData);
+        setEditingGroup(null);
+      } else {
+        await api.post(`/projects/${activeProject?._id}/ledger-groups`, formData);
+      }
       setShowForm(false);
       setFormData({ groupName: '', alias: '', accountType: '', remarks: '' });
       fetchLedgerGroups();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to create ledger group');
+      alert(error.response?.data?.message || `Failed to ${editingGroup ? 'update' : 'create'} ledger group`);
     }
+  };
+
+  const handleEdit = (group: LedgerGroup) => {
+    setEditingGroup(group);
+    setFormData({
+      groupName: group.groupName,
+      alias: group.alias,
+      accountType: typeof group.accountType === 'object' ? group.accountType._id : group.accountType,
+      remarks: group.remarks || '',
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (groupId: string) => {
+    if (!confirm('Are you sure you want to delete this ledger group? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await api.delete(`/projects/${activeProject?._id}/ledger-groups/${groupId}`);
+      fetchLedgerGroups();
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to delete ledger group');
+    }
+  };
+
+  const handleCancel = () => {
+    setShowForm(false);
+    setEditingGroup(null);
+    setFormData({ groupName: '', alias: '', accountType: '', remarks: '' });
   };
 
   if (!activeProject) {
@@ -61,7 +96,13 @@ export default function LedgerGroups() {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">Ledger Groups</h2>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            if (showForm) {
+              handleCancel();
+            } else {
+              setShowForm(true);
+            }
+          }}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
         >
           {showForm ? 'Cancel' : 'Create New'}
@@ -125,12 +166,21 @@ export default function LedgerGroups() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
             />
           </div>
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-          >
-            Create
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+            >
+              {editingGroup ? 'Update' : 'Create'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg"
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       )}
 
@@ -141,6 +191,7 @@ export default function LedgerGroups() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Group Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alias</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account Type</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -154,6 +205,22 @@ export default function LedgerGroups() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {typeof group.accountType === 'object' ? group.accountType.name : ''}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEdit(group)}
+                      className="text-green-600 hover:text-green-800"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(group._id)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
